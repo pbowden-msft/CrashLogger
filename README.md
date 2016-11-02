@@ -23,3 +23,7 @@ When `CrashLogger --Install` is run, the following occurs:<br>
 3. The LaunchAgent unzips the crash log, extracts key information, then moves the report to the archive area using a file name based on the date and time of the crash</br>
 4. The LaunchAgent writes a one-line summary of the crash to `$HOME/Library/Group Containers/UBF8T346G9.ms/MerpArchive/CrashSummary.txt`</br>
 5. The LaunchAgent will send the one-line summary to the console log</br>
+
+
+<b>Example of console log entry</b></br>
+`11/1/16 7:34:21.943 PM pbowden[60463]: com.microsoft.CrashLogger 2016-11-02 02:34:17 com.microsoft.Excel 15.28.0.161031 SIG_FORCE_QUIT 29c2 CrashReport-161101-193421.txt`
