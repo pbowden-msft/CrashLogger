@@ -1,0 +1,239 @@
+#!/bin/sh
+#set -x
+
+TOOL_NAME="Microsoft Office 2016 Crash Logger Tool"
+TOOL_VERSION="1.0"
+
+## Copyright (c) 2016 Microsoft Corp. All rights reserved.
+## Scripts are not supported under any Microsoft standard support program or service. The scripts are provided AS IS without warranty of any kind.
+## Microsoft disclaims all implied warranties including, without limitation, any implied warranties of merchantability or of fitness for a 
+## particular purpose. The entire risk arising out of the use or performance of the scripts and documentation remains with you. In no event shall
+## Microsoft, its authors, or anyone else involved in the creation, production, or delivery of the scripts be liable for any damages whatsoever 
+## (including, without limitation, damages for loss of business profits, business interruption, loss of business information, or other pecuniary 
+## loss) arising out of the use of or inability to use the sample scripts or documentation, even if Microsoft has been advised of the possibility
+## of such damages.
+## Feedback: pbowden@microsoft.com
+
+# Constants
+SCRIPTPATH=$( cd $(dirname $0) ; pwd -P )
+SCRATCH_AREA="$HOME/Library/Group Containers/UBF8T346G9.ms/MerpScratch/"
+CRASH_REPORT="$HOME/Library/Group Containers/UBF8T346G9.ms/MerpTempItems/LastSentCrashReport.zip"
+MERP_TEMP="$HOME/Library/Group Containers/UBF8T346G9.ms/MerpTempItems/"
+MERP_ARCHIVE="$HOME/Library/Group Containers/UBF8T346G9.ms/MerpArchive/"
+MERP_SUMMARY="$HOME/Library/Group Containers/UBF8T346G9.ms/MerpArchive/CrashSummary.txt"
+LAUNCH_AGENT="$HOME/Library/LaunchAgents/com.microsoft.CrashLogger.plist"
+TOOL_PATH="$HOME/Library/Application Support/com.microsoft.CrashLogger/CrashLogger"
+
+function ShowUsage {
+# Shows tool usage and parameters
+	echo $TOOL_NAME - $TOOL_VERSION
+	echo "Purpose: Configures the computer to log and archive Office 2016 crash reports"
+	echo "Usage: CrashLogger [--Install] [--Uninstall] [--ViewLog]"
+	echo "Example: CrashLogger --Install"
+	echo
+	exit 0
+}
+
+function InitializeScratchArea {
+# Creates and cleans temporary file area
+	if [ -d "$SCRATCH_AREA" ]; then
+		rm -drf "$SCRATCH_AREA"
+	fi
+	mkdir "$SCRATCH_AREA"
+}
+
+function InitializeArchiveArea {
+# Creates MERP archive path if it doesn't exist
+	if [ ! -d "$MERP_ARCHIVE" ]; then
+		mkdir "$MERP_ARCHIVE"
+	fi
+	if [ ! -f "$MERP_SUMMARY" ]; then
+		touch "$MERP_SUMMARY"
+	fi
+}
+
+function CheckCrashReportExists {
+# Verifies that a crash report is present - otherwise bail
+	if [ ! -f "$CRASH_REPORT" ]; then
+		exit 0
+	fi
+}
+
+function CopyScript {
+	if [ ! -d "$HOME/Library/Application Support/com.microsoft.CrashLogger" ]; then
+		mkdir "$HOME/Library/Application Support/com.microsoft.CrashLogger"
+	fi
+	cp "$SCRIPT_PATH""$0" "$TOOL_PATH"
+	if [ -f "$TOOL_PATH" ]; then
+		echo "Script installed at $TOOL_PATH"
+	else
+		echo "Script failed to install"
+		exit 1
+	fi
+}
+
+function SetCrashLoggingState {
+# Enables and disables the crash logging state
+	local STATE="$1"
+	defaults write com.microsoft.errorreporting IsStoreLastCrashEnabled -bool $STATE
+}
+
+function ArchiveCrashReport {
+# Moves call-stack to the archive area then deletes LastSentCrashReport.zip
+	if [ -f "$SCRATCH_AREA""CrashReport.txt" ]; then
+		TIMENOW=$(date +"%y%m%d-%H%M%S")
+		CRASH_FILENAME="CrashReport-""$TIMENOW"".txt"
+		mv -f "$SCRATCH_AREA""CrashReport.txt" "$MERP_ARCHIVE""$CRASH_FILENAME"
+		echo "$CRASH_FILENAME"
+	fi
+	if [ -f "$CRASH_REPORT" ]; then
+		rm "$CRASH_REPORT"
+	fi
+}
+
+function UnzipCrashReport {
+# Unzips the LastSentCrashReport.zip file into the scratch area
+	if [ -f "$CRASH_REPORT" ]; then
+		unzip -oqq "$CRASH_REPORT" -d "$SCRATCH_AREA"
+	fi
+}
+
+function ExtractCrashSummary {
+# Extracts information about the crash
+	if [ -f "$SCRATCH_AREA""/CrashReport.txt" ]; then
+		CRASH_TIME=$(grep -o 'Date/Time: .*' "$SCRATCH_AREA""/CrashReport.txt" | cut -d ' ' -f2 -f3)
+		CRASH_APPID=$(grep -o 'Application Bundle ID: .*' "$SCRATCH_AREA""/CrashReport.txt" | cut -d ':' -f2 | cut -d ' ' -f2)
+		CRASH_APPVER=$(grep -o 'Application Version: .*' "$SCRATCH_AREA""/CrashReport.txt" | cut -d ':' -f2 | cut -d ' ' -f2)
+		CRASH_EXCEPTION=$(grep -o 'Exception: .*' "$SCRATCH_AREA""/CrashReport.txt" | cut -d ':' -f2 | cut -d ' ' -f2)
+		CRASH_STACKHASH=$(grep -o 'StackHash: .*' "$SCRATCH_AREA""/CrashReport.txt" | cut -d ':' -f2 | cut -d ' ' -f2)
+	fi
+	echo "$CRASH_TIME $CRASH_APPID $CRASH_APPVER $CRASH_EXCEPTION $CRASH_STACKHASH"
+}
+
+function LogCrashSummary {
+# Sends crash summary to the console log and archive summary
+	local SUMMARY_TEXT="$1"
+	local FULL_TEXT_FILENAME="$2"
+	logger "com.microsoft.CrashLogger $SUMMARY_TEXT $FULL_TEXT_FILENAME"
+	echo "$SUMMARY_TEXT $FULL_TEXT_FILENAME" >> "$MERP_SUMMARY"
+}
+
+function ViewLog {
+# Echos the contents of CrashSummary.txt
+	cat "$MERP_SUMMARY"
+}
+
+function EnableCrashAgent {
+# Creates the plist in the agents folder
+	if [ -f "$LAUNCH_AGENT" ]; then
+		launchctl unload "$LAUNCH_AGENT"
+		rm -f "$LAUNCH_AGENT"
+	fi
+	touch "$LAUNCH_AGENT"
+	echo "<?xml version=""1.0"" encoding=""UTF-8""?>" >> "$LAUNCH_AGENT"
+	echo "<!DOCTYPE plist PUBLIC -//Apple Computer//DTD PLIST 1.0//EN http://www.apple.com/DTDs/PropertyList-1.0.dtd>" >> "$LAUNCH_AGENT"
+	echo "<plist version=""1.0"">" >> "$LAUNCH_AGENT"
+	echo "<dict>" >> "$LAUNCH_AGENT"
+    echo "	<key>Label</key>" >> "$LAUNCH_AGENT"
+    echo "	<string>Microsoft Crash Logger</string>" >> "$LAUNCH_AGENT"
+    echo "	<key>ProgramArguments</key>" >> "$LAUNCH_AGENT"
+    echo "	<array>" >> "$LAUNCH_AGENT"
+    echo "    <string>$TOOL_PATH</string>" >> "$LAUNCH_AGENT"
+    echo "    <string>--Run</string>" >> "$LAUNCH_AGENT"
+    echo "	</array>" >> "$LAUNCH_AGENT"
+    echo "	<key>WatchPaths</key>" >> "$LAUNCH_AGENT"
+    echo "	<array>" >> "$LAUNCH_AGENT"
+    echo "    <string>$MERP_TEMP</string>" >> "$LAUNCH_AGENT"
+    echo "	</array>" >> "$LAUNCH_AGENT"
+	echo "</dict>" >> "$LAUNCH_AGENT"
+	echo "</plist>" >> "$LAUNCH_AGENT"
+	launchctl load "$LAUNCH_AGENT"
+}
+
+function DisableCrashAgent {
+# Removes the plist from the agents folder
+	if [ -f "$LAUNCH_AGENT" ]; then
+		launchctl unload "$LAUNCH_AGENT"
+		rm -f "$LAUNCH_AGENT"
+		echo "Removed $LAUNCH_AGENT"
+	fi
+}
+
+function GetSudo {
+# Checks to see if the user has root-level permissions
+	if [ "$EUID" != "0" ]; then
+		sudo -p "Enter administrator password: " echo
+		if [ $? -eq 0 ] ; then
+			echo "0"
+		else
+			echo "1"
+		fi
+	fi
+}
+
+# Evaluate command-line arguments
+if [[ $# = 0 ]]; then
+	ShowUsage
+else
+	for KEY in "$@"
+	do
+	case $KEY in
+    	--Help|-?|--help)
+    	ShowUsage
+    	shift # past argument
+    	;;
+    	--Install|-i|--install)
+    	INSTALL=true
+    	shift # past argument
+		;;
+		--Uninstall|-u|--uninstall)
+		UNINSTALL=true
+		shift # past argument
+		;;
+		--ViewLog|-v|--viewlog)
+		VIEWLOG=true
+		shift # past argument
+		;;
+		--Run|-r|--run)
+		RUNMODE=true
+		shift # past argument
+		;;
+		*)
+    	ShowUsage
+    	;;
+    esac
+	shift # past argument or value
+	done
+fi
+
+## Main
+# Check for run mode
+if [ $INSTALL ]; then
+	echo "Installing CrashLogger"
+	CopyScript
+	InitializeScratchArea
+	InitializeArchiveArea
+	EnableCrashAgent
+	SetCrashLoggingState "TRUE"
+	echo "Done"
+elif [ $UNINSTALL ]; then
+	echo "Removing CrashLogger"
+	SetCrashLoggingState "FALSE"
+	DisableCrashAgent
+	echo "Done"
+elif [ $VIEWLOG ]; then
+	echo "Retrieving crash log summary..."
+	ViewLog
+elif [ $RUNMODE ]; then
+	CheckCrashReportExists
+	InitializeScratchArea
+	InitializeArchiveArea
+	UnzipCrashReport
+	SUMMARY=$(ExtractCrashSummary)
+	CRASH_FILENAME=$(ArchiveCrashReport)
+	LogCrashSummary "$SUMMARY" "$CRASH_FILENAME"
+	InitializeScratchArea
+fi 
+
+
+exit 0
