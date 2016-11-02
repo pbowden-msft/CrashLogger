@@ -18,7 +18,7 @@ When `CrashLogger --Install` is run, the following occurs:<br>
 
 
 <b>What happens when an Office application crashes?</b></br>
-1. Microsoft Error Reporting will send the crash report to the Watson server and then persist the log to disk to `$HOME/Library/Group Containers/UBF8T346G9.ms/MerpTempItems/LastSentCrashReport.zip`</br>
+1. Microsoft Error Reporting will send the crash report to the Watson server and then persist the log to disk at `$HOME/Library/Group Containers/UBF8T346G9.ms/MerpTempItems/LastSentCrashReport.zip`</br>
 2. The LaunchAgent will be triggered</br>
 3. The LaunchAgent unzips the crash log, extracts key information, then moves the report to the archive area using a file name based on the date and time of the crash</br>
 4. The LaunchAgent writes a one-line summary of the crash to `$HOME/Library/Group Containers/UBF8T346G9.ms/MerpArchive/CrashSummary.txt`</br>
